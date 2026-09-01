@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collections performance — Jan to Jul 2026</title>
+<style>
+:root{
+  --paper:#f6f6f4; --panel:#ffffff; --ink:#14171a; --mute:#6f7377;
+  --rule:#dcdbd6; --alert:#a83229; --true:#2f6b4f; --wash:#eceae5;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:14px; line-height:1.45;
+  font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1;
+  padding:26px 30px 34px;
+}
+.wrap{max-width:1180px;margin:0 auto}
+
+/* ---- verdict ---- */
+.verdict{border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:22px}
+.meta{display:flex;justify-content:space-between;align-items:baseline;
+      color:var(--mute);font-size:11.5px;letter-spacing:.02em;margin-bottom:10px}
+h1{font-size:31px;line-height:1.16;font-weight:600;margin:0 0 8px;max-width:24ch}
+h1 .neg{color:var(--alert)}
+.sub{font-size:15px;color:var(--mute);max-width:74ch;margin:0}
+
+/* ---- grid ---- */
+.grid{display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--rule);padding:18px 20px 16px}
+.panel h2{font-size:12.5px;font-weight:600;margin:0 0 3px;letter-spacing:.01em}
+.panel .note{font-size:11.5px;color:var(--mute);margin:0 0 14px}
+
+/* ---- charts ---- */
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.ctitle{font-size:11.5px;color:var(--mute);margin-bottom:2px}
+.cnum{font-size:23px;font-weight:600;letter-spacing:-.01em;margin-bottom:9px}
+.cnum.bad{color:var(--alert)}
+.cnum.good{color:var(--true)}
+.cnum s{color:var(--mute);font-weight:400;font-size:16px;margin-right:7px}
+svg{display:block;width:100%;height:auto}
+
+/* ---- decision ---- */
+.decision{background:var(--ink);color:#f2f2ef;border:none}
+.decision h2{color:#a9aeb2}
+.decision .big{font-size:19px;font-weight:600;line-height:1.3;margin:6px 0 12px}
+.decision p{font-size:12.8px;color:#c8ccce;margin:0 0 12px;line-height:1.5}
+.decision .ask{border-top:1px solid #33383c;padding-top:12px;margin-top:4px}
+.decision .ask b{display:block;font-size:12.5px;color:#f2f2ef;margin-bottom:5px}
+.decision .ask span{font-size:12.4px;color:#c8ccce}
+
+/* ---- tables ---- */
+table{width:100%;border-collapse:collapse;font-size:12.6px}
+th{text-align:left;font-weight:600;color:var(--mute);font-size:11px;
+   padding:0 0 6px;border-bottom:1px solid var(--rule)}
+td{padding:6px 0;border-bottom:1px solid var(--wash);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.n{text-align:right;white-space:nowrap}
+.tag{font-size:10.5px;padding:1px 6px;border:1px solid;border-radius:2px;white-space:nowrap}
+.t-fact{color:var(--true);border-color:#b9cfc2}
+.t-strong{color:var(--true);border-color:#b9cfc2}
+.t-corr{color:#8a6d1f;border-color:#ddd0a8}
+.t-no{color:var(--alert);border-color:#e0bcb7}
+
+/* ---- flags ---- */
+.flags{margin-top:20px}
+.flagrow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:baseline;
+         padding:7px 0;border-bottom:1px solid var(--wash);font-size:12.6px}
+.flagrow:last-child{border-bottom:none}
+.sev{font-size:10.5px;font-weight:600;color:var(--alert);white-space:nowrap}
+.flagrow .impact{color:var(--mute);font-size:12.2px;white-space:nowrap}
+
+.foot{margin-top:22px;padding-top:12px;border-top:1px solid var(--rule);
+      color:var(--mute);font-size:11.3px;display:flex;justify-content:space-between;gap:20px}
+
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .charts{grid-template-columns:1fr}
+  h1{font-size:25px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="verdict">
+    <div class="meta">
+      <span>Collections performance review &nbsp;·&nbsp; Jan–Jul 2026 &nbsp;·&nbsp; 30,000 accounts</span>
+      <span>independent analysis · reproducible from raw</span>
+    </div>
+    <h1>The reported 11% improvement is <span class="neg">the length of March</span>.</h1>
+    <p class="sub">February has 28 days, March has 31. That is a 10.7% difference before anyone
+    makes a call. Normalised for month length, recovery has not moved in seven months.</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- LEFT: the evidence -->
+    <div class="panel">
+      <h2>Recovery, as reported and as corrected</h2>
+      <p class="note">Same payments. The only change is dividing by days in the month.</p>
+
+      <div class="charts">
+        <div>
+          <div class="ctitle">As reported — monthly total</div>
+          <div class="cnum bad">+11.0% <span style="font-size:12px;font-weight:400;color:var(--mute)">Feb → Mar</span></div>
+          <svg viewBox="0 0 300 172" role="img" aria-label="Monthly recovery totals; March is highest">
+            <line x1="30" y1="140" x2="292" y2="140" stroke="#dcdbd6"/>
+            <g font-size="8.5" fill="#6f7377">
+              <text x="26" y="143" text-anchor="end">0</text>
+              <text x="26" y="86" text-anchor="end">10</text>
+              <text x="26" y="32" text-anchor="end">20</text>
+            </g>
+            <line x1="30" y1="86" x2="292" y2="86" stroke="#eceae5"/>
+            <line x1="30" y1="32" x2="292" y2="32" stroke="#eceae5"/>
+            <!-- bars: value/23*108 px height -->
+            <g>
+              <rect x="38"  y="52.1" width="24" height="87.9" fill="#b9b9b4"/>
+              <rect x="74"  y="60.1" width="24" height="79.9" fill="#b9b9b4"/>
+              <rect x="110" y="51.3" width="24" height="88.7" fill="#a83229"/>
+              <rect x="146" y="57.8" width="24" height="82.2" fill="#b9b9b4"/>
+              <rect x="182" y="53.5" width="24" height="86.5" fill="#b9b9b4"/>
+              <rect x="218" y="57.6" width="24" height="82.4" fill="#b9b9b4"/>
+              <rect x="254" y="52.1" width="24" height="87.9" fill="#b9b9b4"/>
+            </g>
+            <g font-size="8.5" fill="#6f7377" text-anchor="middle">
+              <text x="50" y="153">Jan</text><text x="86" y="153">Feb</text>
+              <text x="122" y="153" fill="#a83229" font-weight="600">Mar</text>
+              <text x="158" y="153">Apr</text><text x="194" y="153">May</text>
+              <text x="230" y="153">Jun</text><text x="266" y="153">Jul</text>
+            </g>
+            <text x="30" y="166" font-size="8.5" fill="#6f7377">₹ crore recovered</text>
+            <text x="122" y="45" font-size="8.5" fill="#a83229" text-anchor="middle" font-weight="600">18.9</text>
+            <text x="86" y="54" font-size="8.5" fill="#6f7377" text-anchor="middle">17.0</text>
+          </svg>
+        </div>
+
+        <div>
+          <div class="ctitle">As corrected — per calendar day</div>
+          <div class="cnum good"><s>+11.0%</s>+0.3%</div>
+          <svg viewBox="0 0 300 172" role="img" aria-label="Recovery per calendar day; flat across all months">
+            <line x1="30" y1="140" x2="292" y2="140" stroke="#dcdbd6"/>
+            <g font-size="8.5" fill="#6f7377">
+              <text x="26" y="143" text-anchor="end">0</text>
+              <text x="26" y="86" text-anchor="end">35</text>
+              <text x="26" y="32" text-anchor="end">70</text>
+            </g>
+            <line x1="30" y1="86" x2="292" y2="86" stroke="#eceae5"/>
+            <line x1="30" y1="32" x2="292" y2="32" stroke="#eceae5"/>
+            <g>
+              <rect x="38"  y="46.9" width="24" height="93.1" fill="#b9b9b4"/>
+              <rect x="74"  y="46.3" width="24" height="93.7" fill="#b9b9b4"/>
+              <rect x="110" y="46.1" width="24" height="93.9" fill="#2f6b4f"/>
+              <rect x="146" y="50.0" width="24" height="90.0" fill="#b9b9b4"/>
+              <rect x="182" y="48.4" width="24" height="91.6" fill="#b9b9b4"/>
+              <rect x="218" y="49.8" width="24" height="90.2" fill="#b9b9b4"/>
+              <rect x="254" y="46.9" width="24" height="93.1" fill="#b9b9b4"/>
+            </g>
+            <!-- flat-line emphasis -->
+            <line x1="34" y1="47.6" x2="284" y2="47.6" stroke="#2f6b4f" stroke-width="1.2"
+                  stroke-dasharray="3 3" opacity=".75"/>
+            <g font-size="8.5" fill="#6f7377" text-anchor="middle">
+              <text x="50" y="153">Jan</text><text x="86" y="153">Feb</text>
+              <text x="122" y="153" fill="#2f6b4f" font-weight="600">Mar</text>
+              <text x="158" y="153">Apr</text><text x="194" y="153">May</text>
+              <text x="230" y="153">Jun</text><text x="266" y="153">Jul</text>
+            </g>
+            <text x="30" y="166" font-size="8.5" fill="#6f7377">₹ lakh per day</text>
+            <text x="288" y="43" font-size="8.5" fill="#2f6b4f" text-anchor="end" font-weight="600">flat</text>
+          </svg>
+        </div>
+      </div>
+
+      <div style="margin-top:18px">
+        <table>
+          <tr><th>Finding</th><th style="text-align:right">Value</th><th style="text-align:right;width:78px">Basis</th></tr>
+          <tr><td>Recovery per operating day, seven-month range</td>
+              <td class="n">₹58.4–60.9 L</td><td class="n"><span class="tag t-fact">Fact</span></td></tr>
+          <tr><td>Trend in recovery per day (regression on month)</td>
+              <td class="n">p = 0.33</td><td class="n"><span class="tag t-strong">Strong</span></td></tr>
+          <tr><td>Variance in monthly totals explained by month length</td>
+              <td class="n">r² = 0.82</td><td class="n"><span class="tag t-fact">Fact</span></td></tr>
+          <tr><td>Month-on-month volatility, raw → day-normalised</td>
+              <td class="n">8.4% → 2.6%</td><td class="n"><span class="tag t-fact">Fact</span></td></tr>
+          <tr><td>Payment value that is failed, pending or reversed</td>
+              <td class="n">₹56.3 Cr</td><td class="n"><span class="tag t-fact">Fact</span></td></tr>
+          <tr><td>Portfolio mix shift (χ², risk segment)</td>
+              <td class="n">p = 0.22</td><td class="n"><span class="tag t-strong">Strong</span></td></tr>
+          <tr><td>Recovery arriving with no call, message or visit</td>
+              <td class="n">₹46.0 Cr · 36%</td><td class="n"><span class="tag t-corr">Correlation</span></td></tr>
+          <tr><td>Which channel is working best</td>
+              <td class="n">not measurable</td><td class="n"><span class="tag t-no">No basis</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- RIGHT: the decision -->
+    <div class="panel decision">
+      <h2>The ₹10 Cr decision</h2>
+      <div class="big">Hold the ₹10 Cr for one quarter.</div>
+      <p>The six options differ by less than our measurement error. Three of them
+      are channel bets, and channel effect cannot be measured here: 36% of
+      recovery arrives untouched, and another 18% on two or more channels at once.</p>
+      <p>Agent investment cannot be sized either — agent identity is unrecoverable
+      in the source data, and recovery per agent-hour has been flat at
+      ₹16.1–17.0 K for seven months regardless of staffing.</p>
+      <p>There is no cost table in this data. Any ROI, break-even or payback
+      figure would be invented.</p>
+
+      <div class="ask">
+        <b>Spend ₹40–60 lakh instead</b>
+        <span>Randomised targeting holdout (8 weeks, ~1,700 control account-months
+        — enough to detect a 10% lift at 80% power), plus identity resolution and
+        per-channel cost instrumentation.</span>
+      </div>
+      <div class="ask">
+        <b>What it buys</b>
+        <span>If the experiment finds a lever with a 5% lift, that is ₹9–11 Cr of
+        incremental annual recovery. Cost of waiting: ~₹2.5 Cr of deferred
+        opportunity. Cost of not waiting: ₹10 Cr against a signal we have shown
+        to be a calendar artefact.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA QUALITY -->
+  <div class="panel flags">
+    <h2>Why parts of this screen are blank</h2>
+    <p class="note">Four defects invalidate an entire class of analysis. These are not caveats — they are the reason four questions have no answer above.</p>
+
+    <div class="flagrow"><span class="sev">SEV 1</span>
+      <span><b>Borrower identity is inconsistent.</b> 30,600 rows resolve to 11,015 IDs; 8,468 carry conflicting names, phones and cities. One ID is both a Chennai and a Bhubaneswar borrower.</span>
+      <span class="impact">Geography suppressed</span></div>
+
+    <div class="flagrow"><span class="sev">SEV 1</span>
+      <span><b>Agent identity is unrecoverable.</b> 30,000 rows, 1,000 IDs, 1,099 employee codes, 10 distinct names. Every employee code maps to more than one person.</span>
+      <span class="impact">No per-agent view</span></div>
+
+    <div class="flagrow"><span class="sev">SEV 1</span>
+      <span><b>Call status contradicts call duration.</b> 60% of calls report NO_ANSWER, BUSY or FAILED while carrying ~450 seconds of duration.</span>
+      <span class="impact">No handle-time metrics</span></div>
+
+    <div class="flagrow"><span class="sev">SEV 1</span>
+      <span><b>Channel attribution is structurally impossible.</b> 36% of recovery has no interaction at all; 18% has two or more simultaneously.</span>
+      <span class="impact">No channel ROI</span></div>
+
+    <div class="flagrow"><span class="sev">SEV 2</span>
+      <span><b>Three timezones, no offsets.</b> 67% of calls sit in the wrong hour bucket uncorrected; 8,924 fall on the wrong calendar day.</span>
+      <span class="impact">Corrected</span></div>
+
+    <div class="flagrow"><span class="sev">SEV 2</span>
+      <span><b>500 duplicate payments</b> from ingestion replays and races. Note: deduplicating on payment_reference, the intuitive fix, would have deleted ₹60.8 Cr of real recovery.</span>
+      <span class="impact">Corrected, −₹3.8 Cr</span></div>
+
+    <div class="flagrow"><span class="sev">SEV 2</span>
+      <span><b>August 2026 is a partial month</b> — data stops on the 8th. Any month-on-month including August shows a 74% collapse that did not happen.</span>
+      <span class="impact">Excluded</span></div>
+  </div>
+
+  <div class="foot">
+    <span>Raw ₹191.7 Cr → deduplicated ₹187.9 Cr → recovered ₹126.9 Cr (Jan–Jul). 33.8% of reported payment value is not recovery.</span>
+    <span>Generated by pipeline.py · no manual steps</span>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+data/_linked/
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+data/collections.duckdb
+data/golden_account_month.csv
+data/golden_fct_call.csv
+data/golden_fct_payment.csv
+data/golden_dim_account.csv
+raw/
