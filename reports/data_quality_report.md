@@ -1,12 +1,14 @@
 # Data Quality Report
 
-Twelve defects were found across seventeen source tables. Four of them are
+Fifteen defects were found across seventeen source tables. Four of them are
 severe enough to invalidate an entire class of analysis. Every issue below
 lists how it was detected, what we did about it, and what it costs the
 business if left alone.
 
 All detection queries are in `sql/04_forensics.sql` and are reproducible
-against the golden layer.
+against the golden layer. Every defect is also measured on each run by
+`sql/06_dq_checks.sql` (42 checks: 25 blocking invariants that stop the
+pipeline, 17 source-defect counts), with results in `data/dq_results.csv`.
 
 ## Part 1 documentation index
 
@@ -23,7 +25,7 @@ below, with where the decision is implemented.
 | **Payment attribution** | Payments attributed to the **account**, on the payment's own timestamp, and to nothing else. No channel, campaign or agent attribution is applied, because 36% of recovery has no interaction to attribute to (DQ-04). Attribution is refused, not guessed. | D3, DQ-04 |
 | **Historical changes** | `agents` and `borrowers` arrive as overwritten-style history with no version key. We take the latest version and carry `n_versions` so the churn is visible. No SCD is built on `account_status_history.recorded_at`, because that column is inverted in 50.3% of rows and cannot order events. | D2, D7, D8a, DQ-10 |
 | **Exclusion rules** | Only two things are excluded outright: 500 duplicate rows, and non-SUCCESS payment statuses from the recovery measure. August 2026 is excluded from *trend* analysis but retained in the golden layer. Nothing else is dropped — defects are flagged and travel with the data. | D3, D4, D9 |
-| **Data-quality issues** | Twelve defects, catalogued below. | this document |
+| **Data-quality issues** | Fifteen defects, catalogued below. | this document, `sql/06_dq_checks.sql` |
 | **Assumptions** | (1) Tables without a timezone column are IST. (2) `payment_status = 'SUCCESS'` means settled cash. (3) REVERSED rows are excluded rather than netted, as they cannot be linked to originals. (4) Cost parameters in `metrics.unit_economics` are invented placeholders, marked ASSUMPTION. (5) Calendar days stand in for operating days — no holiday calendar exists in the data. | D1, D4, `03_metrics.sql` |
 
 ---
@@ -35,9 +37,14 @@ below, with where the decision is implemented.
 | Raw payment rows | 25,500 | ₹191.73 Cr | — |
 | After deduplication | 25,000 | ₹187.89 Cr | −500 rows, −₹3.84 Cr |
 | After status filter (SUCCESS only) | 17,534 | ₹131.56 Cr | −7,466 rows, −₹56.33 Cr |
-| **Golden (Jan–Jul, Aug excluded as partial)** | **—** | **₹126.85 Cr** | **−₹64.88 Cr vs raw (−33.8%)** |
+| **Golden (Jan–Jul, Aug excluded as partial)** | **—** | **₹126.85 Cr** | −₹4.71 Cr of August, real but partial |
 
-A third of the value in the payments table is not recovered money.
+**₹60.2 Cr of the ₹191.7 Cr in the payments table (31.4%) is not recovered
+money**: duplicates plus FAILED, PENDING and REVERSED rows. The further
+₹4.7 Cr between ₹131.6 Cr and the golden ₹126.9 Cr is genuine August recovery,
+excluded from the trend only because August is a partial month (DQ-09).
+Check B23 in `sql/06_dq_checks.sql` ties the golden total to the
+SUCCESS payments for January to July to the paisa.
 
 ---
 
@@ -141,10 +148,12 @@ attached and carries a NULL `payment_reference`, so the row hashes differ and
 a single-pass hash dedup misses them.
 
 **The trap:** the intuitive test — repeated `payment_reference` — flags 8,042
-rows. It is wrong. `TXN0000000032` appears against three unrelated borrowers
-for three different amounts; the provider's reference is not globally unique.
-**Deduplicating on `payment_reference` would delete ₹60.8 Cr of genuine
-recovery**, an error 16× larger than the problem being fixed.
+rows worth ₹60.8 Cr. It is wrong. `TXN0000000032` appears against three
+unrelated borrowers for three different amounts; the provider's reference is
+not globally unique. **Deduplicating on `payment_reference` (keeping one row
+per reference) would delete 3,808 genuine payments worth ₹28.9 Cr**, ₹19.8 Cr
+of it successful recovery: an error 7.5× larger than the ₹3.84 Cr of real
+duplicates it was meant to remove.
 
 **Treatment:** two-stage dedup on row hash, then on `payment_id` preferring
 the enriched copy. Exactly 500 rows removed, reconciling with the count of
@@ -163,7 +172,7 @@ or REVERSED. Including them inflates recovery by **₹56.33 Cr (+42.8%)**.
 
 **Treatment:** `is_recovered` and `recovered_amount` defined on SUCCESS only.
 
-**Note on reversals:** 1,284 REVERSED rows cannot be netted against their
+**Note on reversals:** 1,254 REVERSED rows cannot be netted against their
 original payments, because `payment_reference` is not unique and provides no
 reliable link. They are excluded rather than netted, which is conservative.
 
@@ -228,7 +237,8 @@ time, `is_clock_inverted` flagged. No slowly-changing dimension is built on
 
 ### DQ-11 Payments on closed and written-off accounts
 
-12,775 payments land on accounts whose *current* status is CLOSED or WRITEOFF.
+12,529 payments (after deduplication) land on accounts whose *current* status
+is CLOSED or WRITEOFF.
 `accounts` carries only a current status with no effective dating, so we
 cannot tell whether the payment preceded the write-off (normal) or followed it
 (an accounting problem). Flagged, not excluded. Resolving this needs
@@ -239,6 +249,34 @@ effective-dated account status from the source system.
 `calls.agent_id` NULL in 1,827 rows (2.0%) — these calls cannot be attributed
 to an agent. `borrowers.phone` NULL in 614 rows, `borrowers.email` in 895.
 Retained; excluded from the specific metrics they break.
+
+---
+
+### DQ-13 Duplicate call IDs
+
+**Detected:** primary-key uniqueness check on `calls.call_id` (check S15).
+
+1,350 `call_id` values appear twice (2,700 rows, 1.5% of calls). 1,271 pairs
+are byte-identical replays; 79 differ, either by a NULL `agent_id` on one copy
+or by a timestamp shifted by days. Flagged as `is_duplicate_call_id` rather
+than removed: removing one copy of each moves monthly connect rate by less
+than 0.1pp, and for the 79 non-identical pairs, deciding which copy is right
+needs the dialler vendor. Before any per-call metric goes to production,
+these should be deduplicated with the same two-stage method used for payments.
+
+### DQ-14 Duplicate WhatsApp event IDs
+
+600 WhatsApp `event_id` values repeat, all as byte-identical replays (check
+S16). They inflate digital message volume by 600 events but cannot change
+whether an account was touched in a month, so the attribution finding
+(DQ-04) is unaffected. Flagged, not removed.
+
+### DQ-15 Accounts pointing at borrowers that do not exist
+
+2,913 accounts carry a `borrower_id` with no row in `borrowers` (check S17).
+The accounts are kept (the denominator stays at 30,000) and their geography
+is marked unreliable through `geography_is_unreliable`, which defaults to
+TRUE when no borrower row is found.
 
 ---
 
@@ -260,12 +298,13 @@ Negative results, stated because they narrow where the real problem can hide.
 
 ## Monitoring: what should have caught this
 
-None of these defects are subtle. All twelve would be caught by cheap
-assertions running on every load:
+None of these defects are subtle. All fifteen would be caught by cheap
+assertions running on every load, and `sql/06_dq_checks.sql` now runs them:
 
 | Check | Would have caught |
 |---|---|
-| Primary-key uniqueness on every dimension and fact | DQ-01, DQ-02, DQ-05 |
+| Primary-key uniqueness on every dimension and fact | DQ-01, DQ-02, DQ-05, DQ-13, DQ-14 |
+| Foreign-key existence | DQ-15 |
 | Row-count and value delta vs prior load, ±3σ alert | DQ-05, DQ-09 |
 | Referential integrity: every FK resolves to exactly one parent | DQ-01 |
 | Cross-column logic assertions (`status='NO_ANSWER' ⇒ duration=0`) | DQ-03 |

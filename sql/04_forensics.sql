@@ -14,11 +14,27 @@ CREATE SCHEMA IF NOT EXISTS forensics;
 -- ---------------------------------------------------------------------
 -- A. DUPLICATE PAYMENTS -- CONFIRMED, but smaller than it first appears
 --
--- The naive test (repeated payment_reference) flags 3,746 rows. The
--- correct test (identical full-row hash) flags 500. The gap is the trap:
--- payment_reference is not unique in the source system. Treating it as a
--- key would delete ~₹4 Cr of genuine recovery.
+-- The naive test (repeated payment_reference) flags 8,042 rows worth
+-- ₹60.8 Cr. The correct test (row hash, then payment_id) finds 500. The
+-- gap is the trap: payment_reference is not unique in the source system.
+-- Deduplicating on it would delete 3,808 genuine payments worth ₹28.9 Cr,
+-- 7.5x the ₹3.84 Cr of real duplicates.
 -- ---------------------------------------------------------------------
+-- payment_ids a naive dedup would drop (every row after the first per
+-- reference), minus those whose payment_id is also kept under another row.
+CREATE OR REPLACE VIEW forensics.naive_ref_dedup_dropped AS
+WITH ranked AS (
+    SELECT payment_id, row_number() OVER (
+               PARTITION BY payment_reference ORDER BY event_at_naive, payment_id) AS rn
+    FROM stg.payments WHERE payment_reference IS NOT NULL
+),
+kept AS (
+    SELECT payment_id FROM ranked WHERE rn = 1
+    UNION SELECT payment_id FROM stg.payments WHERE payment_reference IS NULL
+)
+SELECT DISTINCT payment_id FROM ranked
+WHERE rn > 1 AND payment_id NOT IN (SELECT payment_id FROM kept);
+
 CREATE OR REPLACE VIEW forensics.a_duplicate_payments AS
 SELECT 'total_rows'                AS measure, count(*)::DOUBLE AS value FROM stg.payments
 UNION ALL SELECT 'distinct_payment_id',        count(DISTINCT payment_id)        FROM stg.payments
@@ -33,11 +49,19 @@ UNION ALL SELECT 'reference_collisions_not_duplicates',
         (SELECT payment_reference FROM stg.payments GROUP BY 1 HAVING count(*) > 1))
     - (SELECT count(*) - count(DISTINCT _row_hash) FROM stg.payments)
 UNION ALL SELECT 'rupees_removed_by_correct_dedup',
-    (SELECT sum(amount) FROM stg.payments) -
-    (SELECT sum(amount) FROM (SELECT DISTINCT _row_hash, amount FROM stg.payments))
-UNION ALL SELECT 'rupees_that_naive_dedup_would_destroy',
+    (SELECT sum(amount) FROM stg.payments) - (SELECT sum(amount) FROM gold.fct_payment)
+UNION ALL SELECT 'rupees_sharing_a_reference',
     (SELECT sum(amount) FROM stg.payments WHERE payment_reference IN
-        (SELECT payment_reference FROM stg.payments GROUP BY 1 HAVING count(*) > 1));
+        (SELECT payment_reference FROM stg.payments GROUP BY 1 HAVING count(*) > 1))
+-- What a naive dedup actually does: keep one row per payment_reference and
+-- drop the rest. Any dropped row whose payment_id survives correct dedup is
+-- a genuine payment lost.
+UNION ALL SELECT 'genuine_payments_naive_dedup_would_delete',
+    (SELECT count(*) FROM gold.fct_payment WHERE payment_id IN (SELECT payment_id FROM forensics.naive_ref_dedup_dropped))
+UNION ALL SELECT 'rupees_naive_dedup_would_delete',
+    (SELECT sum(amount) FROM gold.fct_payment WHERE payment_id IN (SELECT payment_id FROM forensics.naive_ref_dedup_dropped))
+UNION ALL SELECT 'recovered_rupees_naive_dedup_would_delete',
+    (SELECT sum(recovered_amount) FROM gold.fct_payment WHERE payment_id IN (SELECT payment_id FROM forensics.naive_ref_dedup_dropped));
 
 -- Evidence: one reference, three unrelated borrowers, three amounts.
 CREATE OR REPLACE VIEW forensics.a_collision_example AS
@@ -248,7 +272,7 @@ UNION ALL SELECT 'borrowers.phone', count(*) FILTER (WHERE phone IS NULL), count
 UNION ALL SELECT 'borrowers.email', count(*) FILTER (WHERE email IS NULL), count(*) FROM stg.borrowers;
 
 -- H6. Borrower dimension integrity -- the largest single defect found.
--- 30,600 rows, 11,015 ids, 8,518 ids with conflicting identity.
+-- 30,600 rows, 11,015 ids, 8,468 ids with conflicting identity.
 CREATE OR REPLACE VIEW forensics.h6_borrower_identity AS
 SELECT 'borrower_rows'        AS measure, count(*)::DOUBLE AS value FROM stg.borrowers
 UNION ALL SELECT 'distinct_borrower_id', count(DISTINCT borrower_id) FROM stg.borrowers

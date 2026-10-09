@@ -1,4 +1,4 @@
 step,n_rows,rupees
-raw_payment_rows,25500,1917258617.149993
-after_row_hash_dedup,25000,1878892272.8900015
-after_status_filter_SUCCESS,17534,1315583964.6400058
+raw_payment_rows,25500,1917258617.15
+after_row_hash_dedup,25000,1878892272.89
+after_status_filter_SUCCESS,17534,1315583964.64

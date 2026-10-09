@@ -1,0 +1,43 @@
+check_id,tier,check_name,failing_rows,status
+B01,BLOCKING,fct_payment.payment_id is unique,0,PASS
+B02,BLOCKING,fct_payment.payment_id is not null,0,PASS
+B03,BLOCKING,dedup removed exactly the repeated payment_ids,0,PASS
+B04,BLOCKING,dim_account.account_id is unique,0,PASS
+B05,BLOCKING,dim_account has one row per source account (no join fan-out),0,PASS
+B06,BLOCKING,dim_borrower.borrower_id is unique,0,PASS
+B07,BLOCKING,dim_agent.agent_id is unique,0,PASS
+B08,BLOCKING,fct_disposition.disposition_id is unique,0,PASS
+B09,BLOCKING,"account_month is unique on (account_id, month)",0,PASS
+B10,BLOCKING,account_month = every account x every month (fixed denominator),0,PASS
+B11,BLOCKING,every payment resolves to an account,0,PASS
+B12,BLOCKING,every call resolves to an account,0,PASS
+B13,BLOCKING,every non-null call agent resolves to dim_agent,0,PASS
+B14,BLOCKING,every disposition resolves to a call,0,PASS
+B15,BLOCKING,payment amount > 0,0,PASS
+B16,BLOCKING,"payment_status in {SUCCESS, FAILED, PENDING, REVERSED}",0,PASS
+B17,BLOCKING,"recovered_amount = amount for SUCCESS, 0 otherwise",0,PASS
+B18,BLOCKING,every call has an IST timestamp after tz conversion,0,PASS
+B19,BLOCKING,"call timezone in {UTC, Asia/Kolkata, Asia/Dubai}",0,PASS
+B20,BLOCKING,agent session logout >= login,0,PASS
+B21,BLOCKING,calendar_days between 28 and 31,0,PASS
+B22,BLOCKING,partial month (Aug 2026) kept out of the trend spine,0,PASS
+B23,BLOCKING,"golden recovery = SUCCESS payments Jan-Jul, to the paisa",0,PASS
+B24,BLOCKING,monthly metric total = golden total,0,PASS
+B25,BLOCKING,every disposition code maps (no UNMAPPED),0,PASS
+S01,SOURCE_DEFECT,DQ-01 borrower_ids with conflicting identities,8468,WARN
+S02,SOURCE_DEFECT,DQ-02 agent_ids with more than one employee_code,1000,WARN
+S03,SOURCE_DEFECT,DQ-03 unanswered calls with non-zero duration,54902,WARN
+S04,SOURCE_DEFECT,DQ-04 recovering account-months with no touch,5943,WARN
+S05,SOURCE_DEFECT,DQ-05 byte-identical payment replays,486,WARN
+S06,SOURCE_DEFECT,DQ-05 payments sharing a payment_reference,7586,WARN
+S07,SOURCE_DEFECT,DQ-06 non-SUCCESS payment rows,7466,WARN
+S08,SOURCE_DEFECT,DQ-07 calls whose hour changes after tz conversion,60865,WARN
+S09,SOURCE_DEFECT,DQ-08 legacy PTP code needing harmonisation,3904,WARN
+S10,SOURCE_DEFECT,DQ-09 event tables ending before month end (Aug),914,WARN
+S11,SOURCE_DEFECT,DQ-10 status rows recorded before the event,30191,WARN
+S12,SOURCE_DEFECT,DQ-11 payments on CLOSED / WRITEOFF accounts,12529,WARN
+S13,SOURCE_DEFECT,DQ-12 calls with NULL agent_id,1827,WARN
+S14,SOURCE_DEFECT,DQ-12 borrowers with NULL phone,614,WARN
+S15,SOURCE_DEFECT,DQ-13 call rows sharing a call_id,2700,WARN
+S16,SOURCE_DEFECT,DQ-14 duplicate WhatsApp event_ids,600,WARN
+S17,SOURCE_DEFECT,DQ-15 accounts whose borrower_id is not in borrowers,2913,WARN

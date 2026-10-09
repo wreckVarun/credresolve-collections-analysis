@@ -33,7 +33,6 @@ WITH m AS (
         month,
         max(calendar_days)                          AS calendar_days,
         sum(recovered_amount)                       AS recovered_amount,
-        sum(n_payment_rows * 0)                     AS _pad,
         count(DISTINCT account_id)                  AS accounts_in_population,
         count(DISTINCT account_id) FILTER (WHERE is_recovering)  AS accounts_recovering,
         sum(n_calls)      AS n_calls,

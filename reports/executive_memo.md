@@ -27,9 +27,9 @@ volatility collapses from a standard deviation of 8.4% to 2.6%.
 
 ![headline](../figures/fig1_headline.png)
 
-Two further corrections push the same way. **33.8% of reported payment value
-is not recovery**: ₹56.3 Cr sits in FAILED, PENDING and REVERSED rows and
-₹3.8 Cr in duplicates, out of ₹191.7 Cr. And any figure including August 2026
+Two further corrections push the same way. **31.4% of reported payment value
+is not recovered money**: ₹56.3 Cr sits in FAILED, PENDING and REVERSED rows
+and ₹3.8 Cr in duplicates, out of ₹191.7 Cr. And any figure including August 2026
 shows a 74% collapse that did not happen — the data stops on 8 August.
 
 ## Why it happened

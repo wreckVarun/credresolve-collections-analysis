@@ -66,7 +66,7 @@ analytics team — the fix belongs at source.
 | `call_dispositions` | `disposition_id` | unique; code in the *current* enum version | alert on enum drift |
 | `account_status_history` | `history_id` | unique; `recorded_at ≥ event_at` | **currently failing** — see DQ-10 |
 
-Three of seven contracts fail today. Publishing the contracts is the point:
+Four of seven contracts fail today. Publishing the contracts is the point:
 it moves the argument from "the dashboard looks wrong" to "the dialler feed
 is violating clause 3", which is a conversation that gets fixed.
 
@@ -132,6 +132,13 @@ and is diffed against production before promotion. A backfill that changes
 headline recovery by more than 1% requires sign-off.
 
 ## Data quality checks
+
+A working version of this gate already exists in `sql/06_dq_checks.sql`:
+25 blocking checks (keys, fan-out, referential integrity, value rules,
+reconciliation to the paisa) make `pipeline.py` exit non-zero, and 17
+source-defect counts are reported on every run. The production version
+below adds the checks that need history or external data (rolling volume,
+finance ledger).
 
 Run as a gate between clean and golden. Failures block promotion; the previous
 golden snapshot stays live rather than a bad one replacing it.

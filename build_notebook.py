@@ -113,9 +113,9 @@ q("SELECT * FROM forensics.a_duplicate_payments")
 cells.append(md("""
 ### A. Duplicate payments — confirmed, but the intuitive fix is a disaster
 
-`payment_reference` repeats across 8,042 rows. Deduplicating on it would
-remove **₹60.8 Cr** of recovery. That would be wrong, and wrong by 16× the
-size of the actual problem.
+`payment_reference` repeats across 8,042 rows worth ₹60.8 Cr. Deduplicating
+on it would delete **3,808 genuine payments worth ₹28.9 Cr**. That would be
+wrong, and wrong by 7.5× the size of the actual problem.
 """))
 
 cells.append(code("""
@@ -214,13 +214,15 @@ UNION ALL SELECT 'After SUCCESS filter', count(*), sum(recovered_amount)/1e7
 """))
 
 cells.append(md("""
-**33.8% of the value in the payments table is not recovered money.**
+**31.4% of the value in the payments table (₹60.2 Cr) is not recovered money.**
+The remaining ₹4.7 Cr gap to the golden total is real August recovery, held out
+of the trend because August is a partial month.
 
 ₹3.8 Cr is duplicates. ₹56.3 Cr is FAILED, PENDING and REVERSED rows —
 7,466 of 25,000 records. If the business's headline counts payment rows
 without filtering status, that alone inflates the reported level by 43%.
 
-A note on reversals: 1,284 REVERSED rows cannot be netted against their
+A note on reversals: 1,254 REVERSED rows cannot be netted against their
 originals, because `payment_reference` provides no reliable link. Excluding
 them rather than netting is the conservative choice.
 """))

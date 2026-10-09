@@ -20,9 +20,9 @@ CREATE SCHEMA IF NOT EXISTS gold;
 -- which is where the collections floor operates and the only zone in
 -- which "calling hour" means anything to the business.
 --
--- Impact: a row stamped 04:00 UTC is 09:30 IST. Left uncorrected, ~1/3
--- of calls land in the wrong hour bucket and roughly 1 in 25 lands on
--- the wrong calendar day. Every "best time to call" and every daily
+-- Impact: a row stamped 04:00 UTC is 09:30 IST. Left uncorrected, 67%
+-- of calls land in the wrong hour bucket and 8,924 (about 1 in 10) land
+-- on the wrong calendar day. Every "best time to call" and every daily
 -- series is wrong without this step.
 --
 -- Event tables with no timezone column (payments, whatsapp, sms, field
@@ -39,7 +39,7 @@ CREATE OR REPLACE MACRO to_ist(ts, tz) AS
 -- The agents table has 30,000 rows, 1,000 distinct agent_id, 1,099
 -- distinct employee_code and only 10 distinct agent_name. It is a
 -- slowly-changing dimension delivered without a version flag: each
--- agent_id appears up to 35 times with different updated_at values.
+-- agent_id appears up to 48 times with different updated_at values.
 --
 -- The obvious move -- resolve identity on employee_code, or on name --
 -- is wrong here, and provably so:
@@ -80,24 +80,26 @@ WHERE rn = 1;
 -- the one most likely to be got wrong.
 --
 -- payments has 25,500 rows but only 25,000 distinct payment_id and only
--- 20,821 distinct payment_reference. It is tempting to treat every
--- repeated payment_reference as a duplicate and drop 3,746 rows. That
--- would be a serious error.
+-- 20,821 distinct payment_reference. 8,042 rows (₹60.8 Cr) share their
+-- payment_reference with at least one other row. It is tempting to
+-- deduplicate on payment_reference, keeping one row per reference. That
+-- would remove 4,297 rows and would be a serious error.
 --
 -- Inspection shows two structurally different phenomena:
 --   (a) 500 rows that are byte-identical across every column, including
 --       payment_id. These are genuine ingestion replays. Drop them.
---   (b) ~3,250 rows that share a payment_reference but differ in
+--   (b) ~7,500 rows that share a payment_reference but differ in
 --       payment_id, account_id, amount and timestamp. TXN0000000032
 --       appears against three different borrowers for three different
 --       amounts. These are reference-space collisions from a provider
 --       whose reference is not globally unique -- not duplicate money.
---       Dropping them would erase ~₹4 Cr of real recovery.
+--       Deduplicating on the reference would delete 3,808 of these
+--       genuine payments: ₹28.9 Cr gross, ₹19.8 Cr of it SUCCESS.
 --
 -- Rule: deduplicate on the full row hash. Retain reference collisions
 -- and flag them. Payment_reference is demoted from key to attribute.
 --
--- Quantified impact: -500 rows, -₹0.36 Cr gross.
+-- Quantified impact: -500 rows, -₹3.84 Cr gross.
 -- ---------------------------------------------------------------------
 -- Deduplication runs in TWO stages, because there are two distinct
 -- duplication mechanisms and stage 1 alone catches only 486 of 500:
@@ -110,8 +112,8 @@ WHERE rn = 1;
 --              both through. Keep the enriched copy.
 --
 -- Together: exactly 500 rows removed, reconciling with the 500 repeated
--- payment_ids. Getting stage 2 wrong leaves ₹0.01 Cr of phantom recovery
--- and, more importantly, leaves a duplicate primary key in the fact table.
+-- payment_ids. Skipping stage 2 leaves 14 phantom payments and, more
+-- importantly, a duplicate primary key in the fact table.
 CREATE OR REPLACE TABLE gold.fct_payment AS
 WITH stage1 AS (   -- byte-identical replays
     SELECT *, row_number() OVER (PARTITION BY _row_hash ORDER BY _ingested_at) AS rn
@@ -148,8 +150,8 @@ SELECT
     -- DECISION 4: what counts as recovered money.
     -- Only SUCCESS is money in the bank. FAILED, PENDING and REVERSED are
     -- not recovery. The business's headline appears to count payment rows
-    -- irrespective of status: 7,620 of 25,000 rows (30.5%) are non-SUCCESS,
-    -- and including them inflates monthly recovery by ~45%.
+    -- irrespective of status: 7,466 of 25,000 rows (29.9%) are non-SUCCESS,
+    -- and including them inflates recovery by ~43%.
     (payment_status = 'SUCCESS')         AS is_recovered,
     CASE WHEN payment_status = 'SUCCESS' THEN amount ELSE 0 END AS recovered_amount
 FROM flagged;
@@ -225,7 +227,12 @@ SELECT
     (c.call_status = 'ANSWERED')                                 AS is_connected,
     (c.call_status IN ('NO_ANSWER','BUSY','FAILED')
       AND c.duration_sec > 0)                                    AS has_duration_contradiction,
-    (c.agent_id IS NULL)                                         AS is_unattributed_agent
+    (c.agent_id IS NULL)                                         AS is_unattributed_agent,
+    -- DQ-13: 1,350 call_ids appear twice. 1,271 pairs are byte-identical
+    -- replays; 79 differ by a NULL agent_id or a shifted timestamp, so the
+    -- right copy is a question for the dialler vendor. Flagged, not dropped:
+    -- removing one copy of each moves monthly connect rate by < 0.1pp.
+    (count(*) OVER (PARTITION BY c.call_id) > 1)                 AS is_duplicate_call_id
 FROM stg.calls c;
 
 
@@ -271,7 +278,7 @@ FROM stg.account_status_history;
 -- DECISION 8a: Borrower identity is NOT reliable. Geography is suppressed.
 --
 -- borrowers.csv has 30,600 rows but only 11,015 distinct borrower_id.
--- 8,518 of those ids carry CONFLICTING rows -- not replays, genuinely
+-- 8,468 of those ids carry CONFLICTING rows -- not replays, genuinely
 -- different people. BRW0001072 appears as "Aarav Sharma" in Chennai and
 -- as "Rahul Verma" in Bhubaneswar, with different phones and emails,
 -- across four records. Up to 11 versions exist for a single id.
@@ -279,9 +286,9 @@ FROM stg.account_status_history;
 -- Two consequences, and the second is the important one:
 --
 --   1. Joining accounts to borrowers naively fans the 30,000-row account
---      dimension out to 78,514 rows and inflates every downstream sum by
---      ~2.6x. Any analysis that joins borrower attributes without
---      collapsing first is silently wrong by a factor of three.
+--      dimension out to 75,601 rows and inflates every downstream sum by
+--      ~2.5x. Any analysis that joins borrower attributes without
+--      collapsing first is silently wrong by that factor.
 --
 --   2. The assignment asks for a geography breakdown. We can produce one,
 --      but we should not trust it. City and state are borrower attributes,

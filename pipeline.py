@@ -2,8 +2,9 @@
 """
 CredResolve collections analysis -- reproducible pipeline.
 
-Runs Raw -> Staging -> Golden -> Metrics -> Forensics and writes the
-golden dataset plus every metric and forensic table to disk.
+Runs Raw -> Staging -> Golden -> Metrics -> Forensics -> DQ checks and
+writes the golden dataset plus every metric and forensic table to disk.
+Exits non-zero if any BLOCKING data-quality check fails.
 
 Usage:
     python pipeline.py --data-dir ./raw/ --out ./data/
@@ -27,6 +28,7 @@ SQL_FILES = [
     "sql/03_metrics.sql",
     "sql/04_forensics.sql",
     "sql/05_drivers.sql",
+    "sql/06_dq_checks.sql",
 ]
 
 # Source files arrive with a millisecond-epoch prefix (1788218010160_accounts.csv).
@@ -99,6 +101,9 @@ def run(db_path, data_dir, out_dir):
         "drivers_cohort_vintage":    "SELECT * FROM drivers.cohort_vintage",
     }
     for name, q in exports.items():
+        # ORDER BY ALL so the files are byte-stable across runs; without it
+        # a parallel engine writes rows in whatever order threads finish.
+        q = f"SELECT * FROM ({q}) ORDER BY ALL"
         con.execute(f"COPY ({q}) TO '{out_dir}/{name}.parquet' (FORMAT PARQUET)")
         con.execute(f"COPY ({q}) TO '{out_dir}/{name}.csv' (HEADER, DELIMITER ',')")
     print(f"[out  ] {len(exports)} tables written to {out_dir}")
@@ -130,7 +135,20 @@ def run(db_path, data_dir, out_dir):
     print(head.to_string(index=False))
     head.to_csv(f"{out_dir}/headline_monthly.csv", index=False)
 
+    # ---- data-quality gate ------------------------------------------
+    dq = con.execute("SELECT * FROM dq.results ORDER BY check_id").df()
+    dq.to_csv(f"{out_dir}/dq_results.csv", index=False)
+    print("\n--- Data-quality checks ---")
+    print(dq.to_string(index=False))
+    failed = dq[dq.status == "FAIL"]
+    n_block = (dq.tier == "BLOCKING").sum()
+    print(f"\n{n_block - len(failed)}/{n_block} blocking checks passed, "
+          f"{(dq.status == 'WARN').sum()} known source defects measured")
+
     con.close()
+    if len(failed):
+        sys.exit(f"ERROR: {len(failed)} blocking data-quality check(s) failed: "
+                 + ", ".join(failed.check_id))
     return head
 
 

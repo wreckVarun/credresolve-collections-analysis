@@ -16,6 +16,10 @@
 
 CREATE SCHEMA IF NOT EXISTS stg;
 
+-- Money columns are DECIMAL(18,2), not DOUBLE. Floating-point sums depend
+-- on the order rows are added in, so a parallel engine can return totals
+-- that differ in the last digits between runs. DECIMAL sums are exact.
+--
 -- sample_size=-1 forces a full-file type scan. Several columns here only
 -- reveal their true type, or their NULLs, well beyond the default 20k
 -- sample; letting DuckDB guess produced silent VARCHAR casts on amounts.
@@ -25,24 +29,33 @@ SELECT
     payment_id, account_id, borrower_id,
     CAST(event_at AS TIMESTAMP)      AS event_at_naive,
     payment_reference,
-    CAST(amount AS DOUBLE)           AS amount,
+    CAST(amount AS DECIMAL(18,2))           AS amount,
     upper(trim(payment_status))      AS payment_status,
     upper(trim(payment_method))      AS payment_method,
     provider_id,
     'payments.csv'                   AS _src_file,
     current_timestamp                AS _ingested_at,
-    md5(concat_ws('|', payment_id, account_id, borrower_id,
-                  CAST(event_at AS VARCHAR), payment_reference,
-                  CAST(amount AS VARCHAR), payment_status,
-                  payment_method, provider_id)) AS _row_hash
+    -- NULLs are replaced with an explicit marker before hashing.
+    -- concat_ws skips NULL arguments, so without it ('a', NULL, 'b') and
+    -- ('a', 'b', NULL) would produce the same string and the same hash.
+    md5(concat_ws('|',
+        coalesce(CAST(payment_id AS VARCHAR), '<null>'),
+        coalesce(CAST(account_id AS VARCHAR), '<null>'),
+        coalesce(CAST(borrower_id AS VARCHAR), '<null>'),
+        coalesce(CAST(event_at AS VARCHAR), '<null>'),
+        coalesce(CAST(payment_reference AS VARCHAR), '<null>'),
+        coalesce(CAST(amount AS VARCHAR), '<null>'),
+        coalesce(CAST(payment_status AS VARCHAR), '<null>'),
+        coalesce(CAST(payment_method AS VARCHAR), '<null>'),
+        coalesce(CAST(provider_id AS VARCHAR), '<null>'))) AS _row_hash
 FROM read_csv_auto('raw/payments.csv', header=true, sample_size=-1);
 
 CREATE OR REPLACE TABLE stg.accounts AS
 SELECT
     account_id, borrower_id,
     upper(trim(loan_type))              AS loan_type,
-    CAST(principal_amount AS DOUBLE)    AS principal_amount,
-    CAST(outstanding_amount AS DOUBLE)  AS outstanding_amount,
+    CAST(principal_amount AS DECIMAL(18,2))    AS principal_amount,
+    CAST(outstanding_amount AS DECIMAL(18,2))  AS outstanding_amount,
     CAST(dpd AS INTEGER)                AS dpd,
     upper(trim(risk_segment))           AS risk_segment,
     upper(trim(status))                 AS status,
@@ -94,7 +107,7 @@ FROM read_csv_auto('raw/call_dispositions.csv', header=true, sample_size=-1);
 CREATE OR REPLACE TABLE stg.promises_to_pay AS
 SELECT ptp_id, account_id, borrower_id,
        CAST(event_at AS TIMESTAMP) AS event_at_naive,
-       agent_id, CAST(promised_amount AS DOUBLE) AS promised_amount,
+       agent_id, CAST(promised_amount AS DECIMAL(18,2)) AS promised_amount,
        CAST(promised_date AS TIMESTAMP) AS promised_date,
        upper(trim(status)) AS status, upper(trim(source)) AS source,
        'promises_to_pay.csv' AS _src_file, current_timestamp AS _ingested_at

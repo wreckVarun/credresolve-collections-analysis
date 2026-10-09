@@ -1,13 +1,17 @@
 """Cross-check every number asserted in the reports against the rebuilt DB."""
 #
-# Run after pipeline.py. Cross-checks all 37 numeric claims made in the
+# Run after pipeline.py. Cross-checks every numeric claim made in the
 # reports against the rebuilt database. Any FAIL means a document and the
 # data disagree.
 #   python pipeline.py --data-dir <raw> --out data && python verify.py
+import sys
 import duckdb, numpy as np
 from scipy import stats
-c=duckdb.connect('data/collections.duckdb'); v=lambda s: c.sql(s).fetchone()[0]
-ok=lambda cond,label,got: print(f"{'PASS' if cond else '*** FAIL ***':12s} {label:52s} {got}")
+c=duckdb.connect('data/collections.duckdb', read_only=True); v=lambda s: float(c.sql(s).fetchone()[0])
+results=[]
+def ok(cond,label,got):
+    results.append(bool(cond))
+    print(f"{'PASS' if cond else '*** FAIL ***':12s} {label:52s} {got}")
 
 m=c.sql("select * from metrics.monthly_recovery order by month").df()
 
@@ -33,13 +37,19 @@ ok(abs(raw-191.7)<0.1,"raw Rs 191.7 Cr",round(raw,2))
 ok(abs(raw-ded-3.8)<0.1,"dupes Rs 3.8 Cr",round(raw-ded,2))
 ok(abs(ded-suc-56.3)<0.1,"non-SUCCESS Rs 56.3 Cr",round(ded-suc,2))
 ok(abs(gold-126.9)<0.1,"golden Jan-Jul Rs 126.9 Cr",round(gold,2))
-ok(abs(100*(raw-gold)/raw-33.8)<0.3,"33.8% not recovery",f"{100*(raw-gold)/raw:.2f}%")
+ok(abs(100*(raw-suc)/raw-31.4)<0.1 and abs(raw-suc-60.2)<0.1,"Rs 60.2 Cr / 31.4% not recovered money",f"{raw-suc:.2f} / {100*(raw-suc)/raw:.2f}%")
+ok(abs(suc-gold-4.71)<0.01,"Rs 4.71 Cr August held out of trend",round(suc-gold,2))
 ok(abs(100*(ded-suc)/suc-43)<1.5,"+43% level inflation",f"{100*(ded-suc)/suc:.1f}%")
 ok(v("select count(*) from stg.payments")-v("select count(*) from gold.fct_payment")==500,"exactly 500 dupes removed",
    v("select count(*) from stg.payments")-v("select count(*) from gold.fct_payment"))
 ok(v("select count(*) from gold.fct_payment where is_recovered")==17534,"17,534 SUCCESS rows",v("select count(*) from gold.fct_payment where is_recovered"))
-ok(abs(v("select value from forensics.a_duplicate_payments where measure='rupees_that_naive_dedup_would_destroy'")/1e7-60.8)<0.2,
-   "naive ref-dedup destroys Rs 60.8 Cr", round(v("select value from forensics.a_duplicate_payments where measure='rupees_that_naive_dedup_would_destroy'")/1e7,2))
+fx=lambda m: v(f"select value from forensics.a_duplicate_payments where measure='{m}'")
+ok(abs(fx('rupees_sharing_a_reference')/1e7-60.8)<0.2 and fx('rows_sharing_a_reference')==8042,
+   "8,042 rows / Rs 60.8 Cr share a reference", f"{fx('rows_sharing_a_reference'):.0f} / {fx('rupees_sharing_a_reference')/1e7:.2f}")
+ok(fx('genuine_payments_naive_dedup_would_delete')==3808 and abs(fx('rupees_naive_dedup_would_delete')/1e7-28.9)<0.1,
+   "naive ref-dedup deletes 3,808 genuine / Rs 28.9 Cr", f"{fx('genuine_payments_naive_dedup_would_delete'):.0f} / {fx('rupees_naive_dedup_would_delete')/1e7:.2f}")
+ok(abs(fx('recovered_rupees_naive_dedup_would_delete')/1e7-19.8)<0.1,
+   "... of which Rs 19.8 Cr SUCCESS recovery", round(fx('recovered_rupees_naive_dedup_would_delete')/1e7,2))
 
 # attribution
 o=c.sql("select * from forensics.b_attribution_overlap order by channels_touching").df()
@@ -65,7 +75,7 @@ ci=v("select count(*) from gold.fct_status_history where is_clock_inverted")
 ok(ci==30191,"30,191 clock inversions",ci)
 tz=c.sql("select sum(hour_bucket_changed) h, sum(calendar_day_changed) d from forensics.c_timezone_impact").df()
 ok(abs(100*tz.h[0]/91350-67)<1.5,"67% wrong hour bucket",f"{100*tz.h[0]/91350:.1f}%")
-ok(tz.d[0]==8924 or abs(tz.d[0]-6997)<10,"calendar-day shifts",int(tz.d[0]))
+ok(tz.d[0]==8924,"8,924 calendar-day shifts",int(tz.d[0]))
 
 # drivers
 af=c.sql("select * from drivers.attempt_frequency order by attempt_band").df()
@@ -80,3 +90,10 @@ gt=c.sql("select * from forensics.g_targeting_by_status").df()
 ok(abs(100*gt.coverage.min()-77.2)<0.2 and abs(100*gt.coverage.max()-78.1)<0.2,"targeting coverage 77-78%",f"{100*gt.coverage.min():.1f}-{100*gt.coverage.max():.1f}")
 gd=c.sql("select * from forensics.g_denominator").df()
 ok(abs(100*gd.rate_fixed_denominator.min()-7.24)<0.05 and abs(100*gd.rate_fixed_denominator.max()-8.06)<0.05,"recovery rate 7.2-8.1%",f"{100*gd.rate_fixed_denominator.min():.2f}-{100*gd.rate_fixed_denominator.max():.2f}")
+
+dq=c.sql("select count(*) from dq.results where status='FAIL'").fetchone()[0]
+ok(dq==0,"all blocking data-quality checks pass",f"{dq} failing")
+
+n_fail=results.count(False)
+print(f"\n{len(results)-n_fail}/{len(results)} checks passed")
+sys.exit(1 if n_fail else 0)

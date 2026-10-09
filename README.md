@@ -20,7 +20,7 @@ or open [`dashboard/index.html`](dashboard/index.html) in a browser.
 | Variance in monthly totals explained by month length | **r² = 0.82** (p = 0.005) |
 | Trend in recovery per operating day, Jan–Jul | none (p = 0.33) |
 | Segments trending (of 14 tested) | **0** |
-| Reported payment value that is not recovery | **₹64.9 Cr of ₹191.7 Cr (33.8%)** |
+| Reported payment value that is not recovered money | **₹60.2 Cr of ₹191.7 Cr (31.4%)** |
 | Recovery arriving with no call, message or visit | **₹46.0 Cr (36%)** |
 | ₹10 Cr recommendation | **Hold one quarter.** Spend ₹40–60 L on a randomised holdout |
 
@@ -28,10 +28,11 @@ Two places where the intuitive approach is wrong, and the wrong answer is
 larger than the problem it fixes:
 
 - **Deduplicating payments on `payment_reference`** — the obvious key —
-  would delete **₹60.8 Cr of genuine recovery**. The reference is not unique
-  in the source system; one reference maps to three unrelated borrowers. The
-  real duplicate count is 500, found on a full row hash plus a second pass for
-  ingestion races.
+  would delete **3,808 genuine payments worth ₹28.9 Cr**, 7.5× the ₹3.84 Cr
+  of real duplicates. 8,042 payments (₹60.8 Cr) share a reference, because
+  the reference is not unique in the source system; one reference maps to
+  three unrelated borrowers. The real duplicate count is 500, found on a full
+  row hash plus a second pass for ingestion races.
 - **Resolving agent identity on `employee_code` or `agent_name`** would
   collapse 1,000 agents into 10 and inflate per-agent recovery ~100×.
 
@@ -41,7 +42,7 @@ larger than the problem it fixes:
 ├── pipeline.py                  reproducible Raw → Golden → Metrics run
 ├── counterfactual.py            Part 4: DiD design, and why it fails here
 ├── make_figures.py              figures used in the memo and notebook
-├── verify.py                    asserts every number in the reports against the data
+├── verify.py                    asserts every number in the reports; exits 1 on any mismatch
 ├── build_notebook.py            assembles the analysis notebook
 │
 ├── sql/
@@ -49,13 +50,14 @@ larger than the problem it fixes:
 │   ├── 02_golden.sql            every judgement call, documented inline
 │   ├── 03_metrics.sql           independent metric definitions
 │   ├── 04_forensics.sql         the seven investigations, with verdicts
-│   └── 05_drivers.sql           Q2 driver dimensions, with verdicts
+│   ├── 05_drivers.sql           Q2 driver dimensions, with verdicts
+│   └── 06_dq_checks.sql         42 data-quality checks; blocking ones stop the run
 │
 ├── notebooks/analysis.ipynb     reasoning, executed with outputs
 │
 ├── reports/
 │   ├── executive_memo.md        2 pages — the primary deliverable
-│   ├── data_quality_report.md   12 defects: detection, treatment, impact
+│   ├── data_quality_report.md   15 defects: detection, treatment, impact
 │   ├── metric_definitions.md    the nine existing definitions, challenged
 │   └── architecture.md          production design
 │
@@ -69,14 +71,18 @@ larger than the problem it fixes:
 ```bash
 pip install -r requirements.txt
 python pipeline.py --data-dir /path/to/raw/csvs --out data
-python verify.py          # asserts all 37 claims in the reports against the data
+python verify.py          # asserts 41 claims in the reports; exits 1 if any fails
 python make_figures.py
 python counterfactual.py
 jupyter notebook notebooks/analysis.ipynb
 ```
 
 `pipeline.py` copies the source CSVs into `./raw/`, stripping the
-millisecond-epoch filename prefixes, then runs the five SQL files in order.
+millisecond-epoch filename prefixes, then runs the six SQL files in order.
+The last one, `06_dq_checks.sql`, writes 42 data-quality checks to
+`data/dq_results.csv`; if any of the 25 blocking checks fails (duplicate key,
+join fan-out, broken foreign key, recovery not reconciling to the paisa),
+the pipeline exits non-zero.
 Requires `duckdb >= 0.10`; the script checks and tells you if yours is older.
 
 **The SQL runs standalone too.** Every `.sql` file uses plain relative paths
@@ -91,6 +97,7 @@ duckdb analysis.duckdb                                        # then, in the CLI
 #   .read sql/03_metrics.sql
 #   .read sql/04_forensics.sql
 #   .read sql/05_drivers.sql
+#   .read sql/06_dq_checks.sql
 #   SELECT * FROM metrics.monthly_recovery ORDER BY month;
 ```
 
@@ -99,7 +106,8 @@ notebook expects `data/collections.duckdb`, so run `pipeline.py` before
 opening it.
 
 Runtime is about 20 seconds. Deterministic: no sampling, no seeds, no manual
-steps. `pipeline.py` handles the millisecond-epoch filename prefixes on the
+steps. Money is stored as `DECIMAL(18,2)` so sums are exact, and exports are
+sorted, so two runs produce byte-identical files. `pipeline.py` handles the millisecond-epoch filename prefixes on the
 source CSVs, so the raw directory can be passed unchanged.
 
 The golden dataset is written to `data/golden_account_month.{parquet,csv}` —
