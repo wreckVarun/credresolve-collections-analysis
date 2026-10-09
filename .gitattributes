@@ -1,0 +1,4 @@
+# Keep the executed notebook and the static dashboard out of GitHub language
+# stats, so the repo is labelled by its pipeline code rather than its outputs.
+notebooks/*.ipynb linguist-documentation
+dashboard/*.html linguist-documentation
